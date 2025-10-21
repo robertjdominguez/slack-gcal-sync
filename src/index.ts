@@ -13,7 +13,9 @@ function loadConfig(): Config {
 
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
+    throw new Error(
+      `Missing required environment variables: ${missing.join(", ")}`,
+    );
   }
 
   return {
@@ -22,6 +24,7 @@ function loadConfig(): Config {
     slackUserToken: process.env.SLACK_USER_TOKEN!,
     pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || "60000", 10),
     logLevel: process.env.LOG_LEVEL || "info",
+    port: parseInt(process.env.PORT || "8080", 10),
   };
 }
 
@@ -30,7 +33,7 @@ let lastEventId: string | null = null;
 
 async function pollAndUpdate(
   calendarClient: CalendarClient,
-  slackClient: SlackClient
+  slackClient: SlackClient,
 ): Promise<void> {
   try {
     // Get events starting in the next minute
@@ -62,7 +65,9 @@ async function pollAndUpdate(
 
     // If no emoji found, use calendar emoji as fallback
     if (!parsedStatus) {
-      console.log(`Event "${event.summary}" does not start with an emoji, using calendar fallback`);
+      console.log(
+        `Event "${event.summary}" does not start with an emoji, using calendar fallback`,
+      );
       parsedStatus = {
         emoji: "📅",
         text: event.summary,
@@ -94,7 +99,7 @@ async function main() {
   // Initialize clients
   const calendarClient = new CalendarClient(
     config.googleCalendarId,
-    config.googleServiceAccountKey
+    config.googleServiceAccountKey,
   );
   const slackClient = new SlackClient(config.slackUserToken);
 
@@ -105,6 +110,32 @@ async function main() {
   }
 
   console.log("All systems ready. Starting poll loop...\n");
+
+  // Start HTTP server for health checks
+  const server = Bun.serve({
+    port: config.port,
+    fetch(req) {
+      const url = new URL(req.url);
+
+      // Health check endpoint
+      if (url.pathname === "/health" || url.pathname === "/") {
+        return new Response(
+          JSON.stringify({
+            status: "healthy",
+            lastEventId: lastEventId,
+            timestamp: new Date().toISOString(),
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      return new Response("Not Found", { status: 404 });
+    },
+  });
+
+  console.log(`HTTP server listening on port ${config.port}`);
 
   // Initial poll
   await pollAndUpdate(calendarClient, slackClient);
@@ -118,6 +149,7 @@ async function main() {
   const shutdown = async () => {
     console.log("\nShutting down gracefully...");
     clearInterval(intervalId);
+    server.stop();
     process.exit(0);
   };
 

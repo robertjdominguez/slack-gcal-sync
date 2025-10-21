@@ -16,4 +16,5 @@ export interface Config {
   slackUserToken: string;
   pollIntervalMs: number;
   logLevel: string;
+  port: number;
 }
