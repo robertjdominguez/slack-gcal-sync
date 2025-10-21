@@ -96,24 +96,10 @@ async function main() {
   const config = loadConfig();
   console.log(`Poll interval: ${config.pollIntervalMs}ms`);
 
-  // Initialize clients
-  const calendarClient = new CalendarClient(
-    config.googleCalendarId,
-    config.googleServiceAccountKey,
-  );
-  const slackClient = new SlackClient(config.slackUserToken);
-
-  // Test Slack connection
-  const slackConnected = await slackClient.testConnection();
-  if (!slackConnected) {
-    throw new Error("Failed to connect to Slack. Check your SLACK_USER_TOKEN.");
-  }
-
-  console.log("All systems ready. Starting poll loop...\n");
-
-  // Start HTTP server for health checks
+  // Start HTTP server
   const server = Bun.serve({
     port: config.port,
+    hostname: "0.0.0.0", // Bind to all interfaces for Cloud Run
     fetch(req) {
       const url = new URL(req.url);
 
@@ -135,7 +121,22 @@ async function main() {
     },
   });
 
-  console.log(`HTTP server listening on port ${config.port}`);
+  console.log(`HTTP server listening on ${config.port}`);
+
+  // Initialize clients
+  const calendarClient = new CalendarClient(
+    config.googleCalendarId,
+    config.googleServiceAccountKey,
+  );
+  const slackClient = new SlackClient(config.slackUserToken);
+
+  // Test Slack connection
+  const slackConnected = await slackClient.testConnection();
+  if (!slackConnected) {
+    throw new Error("Failed to connect to Slack. Check your SLACK_USER_TOKEN.");
+  }
+
+  console.log("All systems ready. Starting poll loop...\n");
 
   // Initial poll
   await pollAndUpdate(calendarClient, slackClient);
